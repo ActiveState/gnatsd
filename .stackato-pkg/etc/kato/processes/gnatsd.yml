@@ -1,0 +1,5 @@
+# Defined by gnatsd.git.
+---
+name: gnatsd
+roles:
+  - primary

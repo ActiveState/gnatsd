@@ -53,6 +53,7 @@ compile:
 install:	
 	mkdir -p $(INSTGOPATH)
 	rsync -a $(BUILDGOPATH)/bin $(INSTGOPATH)
+	rsync -a .stackato-pkg/etc $(INSTROOTDIR)
 	chown -Rh stackato.stackato $(INSTHOMEDIR)
 
 clean: 
