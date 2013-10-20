@@ -38,8 +38,6 @@ BUILDGOPATH=$$PWD/.gopath
 
 GOARGS=-v
 
-GOARGS_TEST=-race
-
 all:	repos compile
 
 # Note: not using goget yet (gnatsd has no dependencies)
