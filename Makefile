@@ -1,5 +1,5 @@
 #
-# Makefile for gnatsd
+# Makefile for stackato-gnatsd
 #
 # Used solely by packaging systems.
 # Must support targets "all", "install", "uninstall".
