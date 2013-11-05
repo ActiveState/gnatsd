@@ -55,19 +55,53 @@ def generate_gnatsd_config(redis_conn, routes):
 		core_ip = get_cluster_mbusip(redis_conn),
 		routes_multiline = "\n".join(routes))
 
+eth0_addr = None
+def get_eth0_ip():
+	global eth0_addr
+	if eth0_addr is not None:
+		return eth0_addr
+	import socket, struct, fcntl
+	iface = 'eth0'
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	sockfd = sock.fileno()
+	SIOCGIFADDR = 0x8915
+	ifreq = struct.pack('16sH14s', iface, socket.AF_INET, '\x00'*14)
+	try:
+		res = fcntl.ioctl(sockfd, SIOCGIFADDR, ifreq)
+	except:
+		return None
+	ip = struct.unpack('16sH2x4s8x', res)[2]
+	eth0_addr = socket.inet_ntoa(ip)
+	return eth0_addr
+
+def is_core_node_on_cluster(redis_conn):
+	core_ip = get_cluster_mbusip(redis_conn)
+	if core_ip == '127.0.0.1':
+		# return False  # not a cluster, let alone a core node
+		# XXX DEBUG
+		return True
+	current_ip = get_eth0_ip()
+	return core_ip == current_ip
+
 
 def main():
 	r = create_config_redis_conn()
-	nodes = list(get_nodes_with_gnatsd(r))
-	routes = ["nats-route://%s:%s" % (ip, PORT) for ip in nodes]
-	print "Found routes: %s" % routes
-	config = generate_gnatsd_config(r, routes)
-	print "Generating config:" + config
-	with open(TMP_CONFIG_PATH, "w") as f:
-		f.write(config)
+	gnatsd_bin = "/s/go/bin/gnatsd"
+	gnatsd_args = []
 
-	# TODO: run with -c only if we are on the core node.
-	os.execv("/s/go/bin/gnatsd", ["/s/go/bin/gnatsd", "-c", TMP_CONFIG_PATH])
+	if is_core_node_on_cluster(r):
+		print "On core node."
+		nodes = list(get_nodes_with_gnatsd(r))
+		routes = ["nats-route://%s:%s" % (ip, PORT) for ip in nodes]
+		print "Found routes: %s" % routes
+		config = generate_gnatsd_config(r, routes)
+		print "Generating config:" + config
+		with open(TMP_CONFIG_PATH, "w") as f:
+			f.write(config)
+		gnatsd_args = ["-c", TMP_CONFIG_PATH]
+
+	print "Exec'ing gnatsd with args: %s" % gnatsd_args
+	os.execv(gnatsd_bin, [gnatsd_bin] + gnatsd_args)
 
 if __name__ == '__main__':
 	main()
