@@ -65,6 +65,8 @@ def main():
 	print "Generating config:" + config
 	with open(TMP_CONFIG_PATH, "w") as f:
 		f.write(config)
+
+	# TODO: run with -c only if we are on the core node.
 	os.execv("/s/go/bin/gnatsd", ["/s/go/bin/gnatsd", "-c", TMP_CONFIG_PATH])
 
 if __name__ == '__main__':

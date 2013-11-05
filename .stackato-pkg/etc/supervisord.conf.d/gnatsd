@@ -1,5 +1,5 @@
 [program:gnatsd]
-command=/s/go/bin/gnatsd
+command=/s/go/bin/stackato-gnatsd
 redirect_stderr=true
 stdout_logfile=/s/logs/gnatsd.log
 stdout_logfile_maxbytes=1MB

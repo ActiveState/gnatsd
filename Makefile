@@ -51,6 +51,7 @@ compile:
 install:	
 	mkdir -p $(INSTGOPATH)
 	rsync -a $(BUILDGOPATH)/bin $(INSTGOPATH)
+	rsync -a stackato-gnatsd $(INSTGOPATH)/bin/
 	rsync -a .stackato-pkg/etc $(INSTROOTDIR)
 	chown -Rh stackato.stackato $(INSTHOMEDIR)
 
