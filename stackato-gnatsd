@@ -9,7 +9,7 @@ import string
 import os
 
 
-PORT = 4242
+PORT = 4222 ## XXX change to 4242
 CLUSTER_PORT = 4244
 
 CONFIG_TEMPLATE = string.Template(r'''
