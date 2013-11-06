@@ -9,7 +9,6 @@ import string
 import os
 
 
-NATS_ROLE_NAME = 'controller'  # TODO: change this
 PORT = 4242
 CLUSTER_PORT = 4244
 
@@ -42,7 +41,8 @@ def create_config_redis_conn():
 def get_nodes_with_gnatsd(redis_conn):
 	node = json.loads(redis_conn.get('node'))
 	for ipaddr, info in node.items():
-		if NATS_ROLE_NAME in info['roles']:
+		roles = info['roles']
+		if 'primary' in roles or 'nats' in roles:
 			yield ipaddr
 
 def get_cluster_mbusip(redis_conn):
