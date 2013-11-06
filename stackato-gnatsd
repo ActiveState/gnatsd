@@ -29,14 +29,10 @@ TMP_CONFIG_PATH = "/tmp/gnatsd.conf"
 
 
 def get_config_redis_uri():
-	return urlparse.urlparse(open('/s/etc/kato/redis_uri').read())
+	return open('/s/etc/kato/redis_uri').read()
 
 def create_config_redis_conn():
-	uri = get_config_redis_uri()
-	host, port = uri.netloc.split(':')
-	port = int(port)
-	db = int(uri.path.strip('/'))
-	return redis.StrictRedis(host=host, port=port, db=db)
+	return redis.StrictRedis.from_url(get_config_redis_uri())
 
 def get_nodes_with_gnatsd(redis_conn):
 	node = json.loads(redis_conn.get('node'))
@@ -99,6 +95,8 @@ def main():
 		with open(TMP_CONFIG_PATH, "w") as f:
 			f.write(config)
 		gnatsd_args = ["-c", TMP_CONFIG_PATH]
+
+	del r  # let's hope this will close the connection
 
 	print "Exec'ing gnatsd with args: %s" % gnatsd_args
 	os.execv(gnatsd_bin, [gnatsd_bin] + gnatsd_args)
