@@ -38,7 +38,7 @@ def get_nodes_with_gnatsd(redis_conn):
 	node = json.loads(redis_conn.get('node'))
 	for ipaddr, info in node.items():
 		roles = info['roles']
-		if 'primary' in roles or 'nats' in roles:
+		if 'nats' in roles:  # exclude nats on core node
 			yield ipaddr
 
 def get_cluster_mbusip(redis_conn):
@@ -89,12 +89,15 @@ def main():
 		print "On core node."
 		nodes = list(get_nodes_with_gnatsd(r))
 		routes = ["nats-route://%s:%s" % (ip, PORT) for ip in nodes]
-		print "Found routes: %s" % routes
-		config = generate_gnatsd_config(r, routes)
-		print "Generating config:" + config
-		with open(TMP_CONFIG_PATH, "w") as f:
-			f.write(config)
-		gnatsd_args = ["-c", TMP_CONFIG_PATH]
+		if routes:
+			print "Found routes: %s" % routes
+			config = generate_gnatsd_config(r, routes)
+			print "Generating config:" + config
+			with open(TMP_CONFIG_PATH, "w") as f:
+				f.write(config)
+			gnatsd_args = ["-c", TMP_CONFIG_PATH]
+		else:
+			print "No non-core nats nodes found; starting gnatsd in standalone mode"
 
 	del r  # let's hope this will close the connection
 
