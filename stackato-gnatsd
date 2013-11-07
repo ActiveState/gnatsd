@@ -1,0 +1,108 @@
+#!/usr/bin/env python
+# Wrapper script to launch gnatsd on a Stackato cluster node.
+# Fetches cluster config from Stackato config server (redis).
+
+import urlparse
+import redis
+import json
+import string
+import os
+
+
+PORT = 4222 ## XXX change to 4242
+CLUSTER_PORT = 4244
+
+CONFIG_TEMPLATE = string.Template(r'''
+port: $port
+
+cluster {
+	host: '$core_ip'
+	port: $cluster_port
+
+	routes = [
+$routes_multiline
+	]
+}
+''')
+
+TMP_CONFIG_PATH = "/tmp/gnatsd.conf"
+
+
+def get_config_redis_uri():
+	return open('/s/etc/kato/redis_uri').read()
+
+def create_config_redis_conn():
+	return redis.StrictRedis.from_url(get_config_redis_uri())
+
+def get_nodes_with_gnatsd(redis_conn):
+	node = json.loads(redis_conn.get('node'))
+	for ipaddr, info in node.items():
+		roles = info['roles']
+		if 'nats' in roles:  # exclude nats on core node
+			yield ipaddr
+
+def get_cluster_mbusip(redis_conn):
+	return json.loads(redis_conn.get('cluster'))['mbusip']
+
+def generate_gnatsd_config(redis_conn, routes):
+	return CONFIG_TEMPLATE.substitute(
+		port = PORT,
+		cluster_port = CLUSTER_PORT,
+		core_ip = get_cluster_mbusip(redis_conn),
+		routes_multiline = "\n".join(routes))
+
+eth0_addr = None
+def get_eth0_ip():
+	global eth0_addr
+	if eth0_addr is not None:
+		return eth0_addr
+	import socket, struct, fcntl
+	iface = 'eth0'
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	sockfd = sock.fileno()
+	SIOCGIFADDR = 0x8915
+	ifreq = struct.pack('16sH14s', iface, socket.AF_INET, '\x00'*14)
+	try:
+		res = fcntl.ioctl(sockfd, SIOCGIFADDR, ifreq)
+	except:
+		return None
+	ip = struct.unpack('16sH2x4s8x', res)[2]
+	eth0_addr = socket.inet_ntoa(ip)
+	return eth0_addr
+
+def is_core_node_on_cluster(redis_conn):
+	core_ip = get_cluster_mbusip(redis_conn)
+	if core_ip == '127.0.0.1':
+		# return False  # not a cluster, let alone a core node
+		# XXX DEBUG
+		return True
+	current_ip = get_eth0_ip()
+	return core_ip == current_ip
+
+
+def main():
+	r = create_config_redis_conn()
+	gnatsd_bin = "/s/go/bin/gnatsd"
+	gnatsd_args = []
+
+	if is_core_node_on_cluster(r):
+		print "On core node."
+		nodes = list(get_nodes_with_gnatsd(r))
+		routes = ["nats-route://%s:%s" % (ip, PORT) for ip in nodes]
+		if routes:
+			print "Found routes: %s" % routes
+			config = generate_gnatsd_config(r, routes)
+			print "Generating config:" + config
+			with open(TMP_CONFIG_PATH, "w") as f:
+				f.write(config)
+			gnatsd_args = ["-c", TMP_CONFIG_PATH]
+		else:
+			print "No non-core nats nodes found; starting gnatsd in standalone mode"
+
+	del r  # let's hope this will close the connection
+
+	print "Exec'ing gnatsd with args: %s" % gnatsd_args
+	os.execv(gnatsd_bin, [gnatsd_bin] + gnatsd_args)
+
+if __name__ == '__main__':
+	main()
