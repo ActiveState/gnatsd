@@ -3,4 +3,4 @@
 name: gnatsd
 roles:
   - primary
-  - nats
+#  - nats
