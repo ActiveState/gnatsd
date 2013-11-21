@@ -7,7 +7,12 @@ import redis
 import json
 import string
 import os
+import logging
 
+logging.basicConfig(
+	format='%(asctime)-15s %(levelname)s %(message)s',
+	level=logging.DEBUG)
+#logging.setLevel(logging.DEBUG)
 
 PORT = 4222 ## XXX change to 4242
 CLUSTER_PORT = 4244
@@ -81,23 +86,27 @@ def is_core_node_on_cluster(redis_conn):
 
 
 def main():
+	logging.debug("Connecting to redis")
 	r = create_config_redis_conn()
+	logging.debug("Successfully connected to redis")
 	gnatsd_bin = "/s/go/bin/gnatsd"
 	gnatsd_args = []
 
 	if is_core_node_on_cluster(r):
-		print "On core node."
+		logging.info("We are on core node of the cluster")
 		nodes = list(get_nodes_with_gnatsd(r))
 		routes = ["nats-route://%s:%s" % (ip, PORT) for ip in nodes]
 		if routes:
-			print "Found routes: %s" % routes
+			logging.debug("Found routes: %s", routes)
 			config = generate_gnatsd_config(r, routes)
-			print "Generating config:" + config
+			logging.debug("Generating config: %s", config)
 			with open(TMP_CONFIG_PATH, "w") as f:
 				f.write(config)
 			gnatsd_args = ["-c", TMP_CONFIG_PATH]
 		else:
-			print "No non-core nats nodes found; starting gnatsd in standalone mode"
+			logging.info("No non-core nats nodes found; starting gnatsd in standalone mode")
+	else:
+		logging.info("We are on a micro cloud")
 
 	del r  # let's hope this will close the connection
 
