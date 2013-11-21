@@ -78,9 +78,7 @@ def get_eth0_ip():
 def is_core_node_on_cluster(redis_conn):
 	core_ip = get_cluster_mbusip(redis_conn)
 	if core_ip == '127.0.0.1':
-		# return False  # not a cluster, let alone a core node
-		# XXX DEBUG
-		return True
+		return False  # not a cluster, let alone a core node
 	current_ip = get_eth0_ip()
 	return core_ip == current_ip
 
