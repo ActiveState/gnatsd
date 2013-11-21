@@ -82,13 +82,10 @@ def is_core_node_on_cluster(redis_conn):
 	current_ip = get_eth0_ip()
 	return core_ip == current_ip
 
-
-def main():
+def generate_gnatsd_args():
 	logging.debug("Connecting to redis")
 	r = create_config_redis_conn()
 	logging.debug("Successfully connected to redis")
-	gnatsd_bin = "/s/go/bin/gnatsd"
-	gnatsd_args = []
 
 	if is_core_node_on_cluster(r):
 		logging.info("We are on core node of the cluster")
@@ -100,15 +97,21 @@ def main():
 			logging.debug("Generating config: %s", config)
 			with open(TMP_CONFIG_PATH, "w") as f:
 				f.write(config)
-			gnatsd_args = ["-c", TMP_CONFIG_PATH]
+
+			return ["-c", TMP_CONFIG_PATH]
 		else:
 			logging.info("No non-core nats nodes found; starting gnatsd in standalone mode")
 	else:
 		logging.info("We are on a micro cloud")
+	return []
 
-	del r  # let's hope this will close the connection
+def main():
+	gnatsd_bin = "/s/go/bin/gnatsd"
+	gnatsd_args = []
 
-	print "Exec'ing gnatsd with args: %s" % gnatsd_args
+	gnatsd_args += generate_gnatsd_args()
+
+	print "Running gnatsd with arguments: %s" % gnatsd_args
 	os.execv(gnatsd_bin, [gnatsd_bin] + gnatsd_args)
 
 if __name__ == '__main__':
