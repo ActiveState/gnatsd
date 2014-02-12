@@ -1,4 +1,4 @@
-// Copyright 2012-2013 Apcera Inc. All rights reserved.
+// Copyright 2012-2014 Apcera Inc. All rights reserved.
 
 package server
 
@@ -111,9 +111,12 @@ func (c *client) initClient() {
 	// after we process inbound msgs from our own connection.
 	c.pcd = make(map[*client]struct{})
 
-	if ip, ok := c.nc.(*net.TCPConn); ok {
-		ip.SetReadBuffer(defaultBufSize)
-	}
+	// No clue why, but this stalls and kills performance on Mac (Mavericks).
+	//
+	//	if ip, ok := c.nc.(*net.TCPConn); ok {
+	//		ip.SetReadBuffer(defaultBufSize)
+	//		ip.SetWriteBuffer(2*defaultBufSize)
+	//	}
 
 	// Set the Ping timer
 	c.setPingTimer()
@@ -209,6 +212,8 @@ func (c *client) processRouteInfo(info *Info) {
 		s.remotes[info.ID] = c
 		s.mu.Unlock()
 		Debug("Registering remote route", info.ID)
+		// Send our local subscriptions to this route.
+		s.sendLocalSubsToRoute(c)
 	}
 }
 
@@ -545,7 +550,7 @@ func (c *client) deliverMsg(sub *subscription, mh, msg []byte) {
 		}
 	}
 
-	if sub.client.nc == nil {
+	if client.nc == nil {
 		client.mu.Unlock()
 		return
 	}
@@ -597,7 +602,6 @@ writeErr:
 	client.mu.Unlock()
 
 	if ne, ok := err.(net.Error); ok && ne.Timeout() {
-		// FIXME: SlowConsumer logic
 		Log("Slow Consumer Detected", clientConnStr(client.nc), client.cid)
 		client.closeConnection()
 	} else {
@@ -654,17 +658,19 @@ func (c *client) processMsg(msg []byte) {
 	var rmap map[string]struct{}
 
 	// If we are a route and we have a queue subscription, deliver direct
-	// since they are sent direct via L2 semantics.
+	// since they are sent direct via L2 semantics. If the match is a queue
+	// subscription, we will return from here regardless if we find a sub.
 	if isRoute {
-		if sub := srv.routeSidQueueSubscriber(c.pa.sid); sub != nil {
-			mh := c.msgHeader(msgh[:si], sub)
-			c.deliverMsg(sub, mh, msg)
+		if sub, ok := srv.routeSidQueueSubscriber(c.pa.sid); ok {
+			if sub != nil {
+				mh := c.msgHeader(msgh[:si], sub)
+				c.deliverMsg(sub, mh, msg)
+			}
 			return
 		}
 	}
 
 	// Loop over all subscriptions that match.
-
 	for _, v := range r {
 		sub := v.(*subscription)
 
@@ -854,6 +860,11 @@ func (c *client) closeConnection() {
 		for _, s := range subs {
 			if sub, ok := s.(*subscription); ok {
 				srv.sl.Remove(sub.subject, sub)
+				// Forward on unsubscribes if we are not
+				// a router ourselves.
+				if c.typ != ROUTER {
+					srv.broadcastUnSubscribe(sub)
+				}
 			}
 		}
 	}
