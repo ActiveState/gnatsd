@@ -1,6 +1,6 @@
-# Defined by gnatsd.git.
+# Defined by https://github.com/ActiveState/gnatsd
 ---
 name: gnatsd
 roles:
   - primary
-#  - nats
+  - nats
