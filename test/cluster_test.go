@@ -3,7 +3,7 @@
 package test
 
 import (
-"fmt"
+	"fmt"
 	"testing"
 	"time"
 
@@ -161,6 +161,11 @@ func TestClusterQueueSubs(t *testing.T) {
 
 	// Send to B
 	sendB("PUB foo 2\r\nok\r\n")
+
+	// Should receive 1 from B.
+	matches = expectMsgsB(1)
+	checkForQueueSid(t, matches, qg2Sids_b)
+
 	sendB("PING\r\n")
 	expectB(pongRe)
 
@@ -239,8 +244,6 @@ func TestClusterDoubleMsgs(t *testing.T) {
 	// Close ClientA1
 	clientA1.Close()
 
-//	time.Sleep(time.Second)
-
 	sendB("PUB foo 2\r\nok\r\n")
 	sendB("PING\r\n")
 	expectB(pongRe)
@@ -316,5 +319,38 @@ func TestClusterDropsRemoteSids(t *testing.T) {
 	}
 	if sc := srvB.NumSubscriptions(); sc != 0 {
 		t.Fatalf("Expected no subscriptions for srvB, got %d\n", sc)
+	}
+}
+
+// This will test that we drop remote sids correctly.
+func TestAutoUnsubscribePropogation(t *testing.T) {
+	srvA, srvB, optsA, _ := runServers(t)
+	defer srvA.Shutdown()
+	defer srvB.Shutdown()
+
+	clientA := createClientConn(t, optsA.Host, optsA.Port)
+	defer clientA.Close()
+
+	sendA, expectA := setupConn(t, clientA)
+	expectMsgs := expectMsgsCommand(t, expectA)
+
+	// We will create subscriptions that will auto-unsubscribe and make sure
+	// we are not accumulating orphan subscriptions on the other side.
+	for i := 1; i <= 100; i++ {
+		sub := fmt.Sprintf("SUB foo %d\r\n", i)
+		auto := fmt.Sprintf("UNSUB %d 1\r\n", i)
+		sendA(sub)
+		sendA(auto)
+		// This will trip the auto-unsubscribe
+		sendA("PUB foo 2\r\nok\r\n")
+		expectMsgs(1)
+	}
+
+	sendA("PING\r\n")
+	expectA(pongRe)
+
+	// Make sure number of subscriptions on B is correct
+	if subs := srvB.NumSubscriptions(); subs != 0 {
+		t.Fatalf("Expected no subscriptions on remote server, got %d\n", subs)
 	}
 }
